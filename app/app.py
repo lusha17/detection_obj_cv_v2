@@ -39,12 +39,13 @@ def get_yolo5(label):
     torch model
         torch-модель типа `<class 'models.common.autoShape'>`
     '''
+    #force_reload=True
     if label=='Base':
-        return torch.hub.load('ultralytics/yolov5', 'custom', path='yolov5m.pt', force_reload=True)  
+        return torch.hub.load('ultralytics/yolov5', 'custom', path='yolov5m.pt')  
     elif label=='Custom small':
-        return torch.hub.load('ultralytics/yolov5', 'custom', path='all_s.pt', force_reload=True)
+        return torch.hub.load('ultralytics/yolov5', 'custom', path='all_s.pt')
     else:
-        return torch.hub.load('ultralytics/yolov5', 'custom', path='all_m.pt', force_reload=True)
+        return torch.hub.load('ultralytics/yolov5', 'custom', path='all_m.pt')
 
 #@st.cache(max_entries=10)
 def get_preds(img : np.ndarray) -> np.ndarray:
