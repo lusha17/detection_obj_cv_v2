@@ -13,6 +13,9 @@ from streamlit_webrtc import VideoProcessorBase, webrtc_streamer
 
 from config import CLASSES_CUSTOM, CLASSES_BASE, WEBRTC_CLIENT_SETTINGS
 DEFAULT_CONFIDENCE_THRESHOLD = 0.5
+from PIL import Image
+image = Image.open('LOGO.png')
+image2 = Image.open('ROUNDED-LOGO.png')
 
 if 'data' not in st.session_state:
     st.session_state.data = []
@@ -22,8 +25,11 @@ if 'data' not in st.session_state:
 st.set_page_config(
     page_title="Weapon Detection Demo",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="collapsed",
+    page_icon = image2
 )
+
+st.sidebar.image(image)
 
 st.title('Weapon Detection Demo')
 
