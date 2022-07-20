@@ -1,7 +1,8 @@
 from streamlit_webrtc import ClientSettings
 
 #CLASSES_CUSTOM = [ 'mask', 'nomask', 'person', 'pistol']
-CLASSES_CUSTOM = [ 'face', 'knife', 'mask', 'pistol']
+CLASSES_CUSTOM_M = [ 'face', 'knife', 'mask', 'pistol']
+CLASSES_CUSTOM_S = [ 'bill', 'card', 'face', 'knife', 'mask', 'pistol', 'purse', 'smartphone']
 CLASSES_BASE= [ 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 
             'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 
             'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 

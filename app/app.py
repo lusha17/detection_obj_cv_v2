@@ -11,13 +11,14 @@ import matplotlib.colors as mcolors
 from PIL import Image
 from streamlit_webrtc import VideoProcessorBase, webrtc_streamer
 
-from config import CLASSES_CUSTOM, CLASSES_BASE, WEBRTC_CLIENT_SETTINGS
+from config import CLASSES_CUSTOM_M, CLASSES_CUSTOM_S, CLASSES_BASE, WEBRTC_CLIENT_SETTINGS
 DEFAULT_CONFIDENCE_THRESHOLD = 0.5
 from PIL import Image
 #image = Image.open('LOGO.png')
 image2 = Image.open('ROUNDED-LOGO.png')
 
 if 'data' not in st.session_state:
+    print('init')
     st.session_state.data = []
 
 #изменим название страницы, отображаемое на вкладке браузера
@@ -47,12 +48,10 @@ st.title('Weapon Detection Demo')
 def get_yolo5(label):
     '''
     Возвращает модель YOLOv5 из Torch Hub типа `model_type`
-
     Arguments
     ----------
     model_type : str, 's', 'm', 'l' or 'x'
         тип модели - s - самая быстрая и неточная, x - самая точная и медленная
-
     Returns
     -------
     torch model
@@ -70,12 +69,10 @@ def get_yolo5(label):
 def get_preds(img : np.ndarray) -> np.ndarray:
     """
     Возвращает прогнозы, полученные от YOLOv5
-
     Arguments
     ---------
     img : np.ndarray
         RGB-изображение загруженное с помощью OpenCV
-
     Returns
     -------
     2d np.ndarray
@@ -88,13 +85,11 @@ def get_colors(indexes : List[int]) -> dict:
     '''
     Возвращает цвета для всех выбранных классов. Цвета формируются 
     на основе наборов TABLEAU_COLORS и BASE_COLORS из Matplotlib
-
     Arguments
     ----------
     indexes : list of int
         список индексов классов в порядке по умолчанию для 
         MS COCO (80 классов, без background)
-
     Returns
     -------
     dict
@@ -121,12 +116,10 @@ def get_legend_color(class_name : int):
     """
     Возвращает цвет ячейки для `pandas.Styler` при создании легенды. 
     Раскарасит ячейку те же цветом, который имеют боксы соотвествующего класс
-
     Arguments
     ---------
     class_name : int
         название класса согласно списку классов MS COCO
-
     Returns
     -------
     str
@@ -144,6 +137,8 @@ class VideoTransformer(VideoProcessorBase):
         self.rgb_colors = rgb_colors
         self.target_class_ids = target_class_ids
         self.confidence_threshold = confidence_threshold
+        #st.session_state.data = []
+        #self.session_state = st.session_state.data
 
     def get_preds(self, img : np.ndarray) -> np.ndarray:
         return self.model([img]).xyxy[0].numpy()
@@ -152,7 +147,10 @@ class VideoTransformer(VideoProcessorBase):
         img = frame.to_ndarray(format="bgr24")
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         result = self.get_preds(img)
-        result = result[np.isin(result[:,-1], self.target_class_ids)]    
+        result = result[np.isin(result[:,-1], self.target_class_ids)]  
+        if 'data' not in st.session_state:
+            print('init3')
+            st.session_state.data = []  
         for bbox_data in result:
             xmin, ymin, xmax, ymax, conf, label = bbox_data
             if conf > self.confidence_threshold:
@@ -161,9 +159,9 @@ class VideoTransformer(VideoProcessorBase):
                 ytext = ymin - 10 if ymin - 10 > 10 else ymin + 15
                 xtext = xmin + 10
                 class_ = CLASSES[label]
-                if (class_ == 'pistol') | (class_ == 'knife'):
-                    time_detect = datetime.datetime.now(pytz.timezone("America/New_York")).replace(tzinfo=None).strftime("%m-%d-%y %H:%M:%S")
-                    st.session_state.data.append({'object': class_, 'time_detect': time_detect})
+                #if (class_ == 'pistol') | (class_ == 'knife'):
+                #    time_detect = datetime.datetime.now(pytz.timezone("America/New_York")).replace(tzinfo=None).strftime("%m-%d-%y %H:%M:%S")
+                #    self.session_state.append({'object': class_, 'time_detect': time_detect})
                 text_for_vis = '{} {}'.format(class_, str(conf.round(2)))
                 img = cv2.putText(img, text_for_vis, (int(xtext), int(ytext)),cv2.FONT_HERSHEY_SIMPLEX,0.5,self.rgb_colors[label],2,)
         return cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
@@ -186,12 +184,15 @@ confidence_threshold = st.slider("Confidence threshold", 0.0, 1.0, DEFAULT_CONFI
 
 #sidebar
 prediction_mode = st.sidebar.radio("",('Single image', 'Web camera'),index=1)
-    
+#CLASSES_CUSTOM_M
 if model_type == 'Base':
     CLASSES = CLASSES_BASE
     classes_selector = st.sidebar.multiselect('Select classes', CLASSES, default='person')
+elif model_type == 'Custom small':
+    CLASSES = CLASSES_CUSTOM_S
+    classes_selector = st.sidebar.multiselect('Select classes', CLASSES, default='pistol')
 else:
-    CLASSES = CLASSES_CUSTOM
+    CLASSES = CLASSES_CUSTOM_M
     classes_selector = st.sidebar.multiselect('Select classes', CLASSES, default='pistol')
 all_labels_chbox = st.sidebar.checkbox('All classes', value=True)
 
@@ -253,6 +254,8 @@ if prediction_mode == 'Single image':
         # use_column_width растянет изображение по ширине центральной колонки
         st.image(img_draw, use_column_width=True)
 elif prediction_mode == 'Web camera':
+    if 'data' not in st.session_state:
+        st.session_state.data = []
     # создаем объект для вывода стрима с камеры
     ctx = webrtc_streamer(key="example", video_processor_factory=VideoTransformer,
         rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
@@ -264,6 +267,7 @@ elif prediction_mode == 'Web camera':
         ctx.video_transformer.rgb_colors = rgb_colors
         ctx.video_transformer.target_class_ids = target_class_ids
         ctx.video_transformer.confidence_threshold = confidence_threshold
+        #ctx.video_transformer.session_state = st.session_state.data
 # выведем список найденных классов при работе с изображением или список всех
 # выбранных классов при работе с видео
 #detected_ids = set(detected_ids if detected_ids is not None else target_class_ids)
