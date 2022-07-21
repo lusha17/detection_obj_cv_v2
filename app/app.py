@@ -181,7 +181,7 @@ else:
 
 rgb_colors = get_colors(target_class_ids)
 detected_ids = None
-
+import time
 
 if prediction_mode == 'Single image':
     uploaded_file = st.file_uploader(
@@ -225,6 +225,7 @@ elif prediction_mode == 'Web camera':
         if ctx.state.playing:
             labels_placeholder = st.empty()
             while True:
+                time.sleep(1)
                 with lock:
                     result_queue = result_queue[-7:]
                     labels_placeholder.dataframe(result_queue)
