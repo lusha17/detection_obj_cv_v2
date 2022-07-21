@@ -61,7 +61,7 @@ st.title('Weapon Detection Demo')
 
 
 
-#@st.cache(max_entries=3)
+@st.cache(max_entries=2)
 def get_yolo5(label):
     if label=='Base':
         return torch.hub.load('ultralytics/yolov5', 'custom', path='yolov5m.pt')  
