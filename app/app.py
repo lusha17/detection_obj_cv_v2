@@ -127,7 +127,7 @@ import av
 
 def transform(frame):
     img = frame.to_ndarray(format="bgr24")
-    img_ch = cv2.cvtColor(img_ch, cv2.COLOR_BGR2RGB)
+    img_ch = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     result = get_preds(img_ch)
     result = result[np.isin(result[:,-1], target_class_ids)]  
     for bbox_data in result:
