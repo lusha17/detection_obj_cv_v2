@@ -41,7 +41,7 @@ class Detection(NamedTuple):
     name: str
     prob: float
 
-result_queue = [] 
+#result_queue = [] 
 
 
 st.set_page_config(
@@ -139,8 +139,9 @@ def transform(frame):
             xtext = xmin + 10
             class_ = CLASSES[label]
             if (class_ == 'firearm') | (class_ == 'knife'):
-                time_detect = datetime.datetime.now(pytz.timezone("America/New_York")).replace(tzinfo=None).strftime("%m-%d-%y %H:%M:%S")
-                result_queue.append({'object': class_, 'time_detect': time_detect})
+                pass
+                #time_detect = datetime.datetime.now(pytz.timezone("America/New_York")).replace(tzinfo=None).strftime("%m-%d-%y %H:%M:%S")
+                #result_queue.append({'object': class_, 'time_detect': time_detect})
             text_for_vis = '{} {}'.format(class_, str(conf.round(2)))
             img = cv2.putText(img, text_for_vis, (int(xtext), int(ytext)),cv2.FONT_HERSHEY_SIMPLEX,0.5,rgb_colors[label],2,)
     return av.VideoFrame.from_ndarray(img, format="bgr24")
@@ -215,18 +216,4 @@ if prediction_mode == 'Single image':
 elif prediction_mode == 'Web camera':
     ctx = webrtc_streamer(key="example", video_frame_callback=transform,
         rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
-        media_stream_constraints={"video": True, "audio": False})
-    #mode=WebRtcMode.SENDRECV, async_processing=True)
-    agree = st.checkbox("Enable weapon logging", value=False)
-    if agree:
-        if ctx.state.playing:
-            labels_placeholder = st.empty()
-            while True:
-                try:
-                    result_queue = result_queue[-7:]
-                    labels_placeholder.dataframe(result_queue)
-                    #time.sleep(0.1)
-                    if (not ctx.state.playing) | (not agree):
-                        break
-                except:
-                    pass
+        media_stream_constraints={"video": True, "audio": False}, mode=WebRtcMode.SENDRECV, async_processing=True)
