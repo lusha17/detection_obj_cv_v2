@@ -47,8 +47,7 @@ result_queue = []
 st.set_page_config(
     page_title="Weapon Detection Demo",
     layout="wide",
-    initial_sidebar_state="collapsed",
-    page_icon = image2
+    initial_sidebar_state="collapsed"
 )
 
 st.sidebar.markdown("""<center data-parsed=""><img src="http://drive.google.com/uc?export=view&id=1Mad62XWdziqcx9wijUODpzGzqYEGhafC" align="center"></center>""",unsafe_allow_html=True,)
