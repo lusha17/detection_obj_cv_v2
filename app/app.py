@@ -1,5 +1,6 @@
 from typing import List
-
+from streamlit_webrtc import ClientSettings
+from typing import List, NamedTuple, Optional
 import cv2
 import torch
 import numpy as np
@@ -9,16 +10,46 @@ import pytz
 import datetime
 import matplotlib.colors as mcolors
 from PIL import Image
-from streamlit_webrtc import VideoProcessorBase, webrtc_streamer
+from streamlit_webrtc import VideoProcessorBase, webrtc_streamer, WebRtcMode
+CLASSES_CUSTOM_M = [ 'face', 'knife', 'mask', 'firearm']
+CLASSES_CUSTOM_S = [ 'bill', 'card', 'face', 'knife', 'mask', 'firearm', 'purse', 'smartphone']
+CLASSES_BASE= [ 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 
+            'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 
+            'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 
+            'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 
+            'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee',
+            'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 
+            'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 
+            'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 
+            'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 
+            'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 
+            'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 
+            'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 
+            'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 
+            'scissors', 'teddy bear', 'hair drier', 'toothbrush' ]
 
-from config import CLASSES_CUSTOM_M, CLASSES_CUSTOM_S, CLASSES_BASE, WEBRTC_CLIENT_SETTINGS
+
+WEBRTC_CLIENT_SETTINGS = ClientSettings(
+        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
+        media_stream_constraints={"video": True, "audio": False},
+    )
+#from config import CLASSES_CUSTOM_M, CLASSES_CUSTOM_S, CLASSES_BASE, WEBRTC_CLIENT_SETTINGS
 DEFAULT_CONFIDENCE_THRESHOLD = 0.5
-from PIL import Image
-#image = Image.open('LOGO.png')
-image2 = Image.open('ROUNDED-LOGO.png')
 
+from PIL import Image
+image2 = Image.open('ROUNDED-LOGO.png')
+import threading
+lock = threading.Lock()
+img_container = {"img": None}
+import queue
+
+class Detection(NamedTuple):
+    name: str
+    prob: float
+
+#result_queue = (queue.Queue()) 
+result_queue = [] 
 if 'data' not in st.session_state:
-    print('init')
     st.session_state.data = []
 
 #изменим название страницы, отображаемое на вкладке браузера
@@ -29,12 +60,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
     page_icon = image2
 )
-st.sidebar.markdown(
-        """
-        <center data-parsed=""><img src="http://drive.google.com/uc?export=view&id=1Mad62XWdziqcx9wijUODpzGzqYEGhafC" align="center"></center>
-        """,
-        unsafe_allow_html=True,
-    )
+st.sidebar.markdown("""<center data-parsed=""><img src="http://drive.google.com/uc?export=view&id=1Mad62XWdziqcx9wijUODpzGzqYEGhafC" align="center"></center>""",unsafe_allow_html=True,)
 st.sidebar.markdown(" ")
 #st.sidebar.image(image2, use_column_width="auto")
 st.title('Weapon Detection Demo')
@@ -46,18 +72,6 @@ st.title('Weapon Detection Demo')
 
 @st.cache(max_entries=3)
 def get_yolo5(label):
-    '''
-    Возвращает модель YOLOv5 из Torch Hub типа `model_type`
-    Arguments
-    ----------
-    model_type : str, 's', 'm', 'l' or 'x'
-        тип модели - s - самая быстрая и неточная, x - самая точная и медленная
-    Returns
-    -------
-    torch model
-        torch-модель типа `<class 'models.common.autoShape'>`
-    '''
-    #force_reload=True
     if label=='Base':
         return torch.hub.load('ultralytics/yolov5', 'custom', path='yolov5m.pt')  
     elif label=='Custom small':
@@ -67,18 +81,6 @@ def get_yolo5(label):
 
 #@st.cache(max_entries=10)
 def get_preds(img : np.ndarray) -> np.ndarray:
-    """
-    Возвращает прогнозы, полученные от YOLOv5
-    Arguments
-    ---------
-    img : np.ndarray
-        RGB-изображение загруженное с помощью OpenCV
-    Returns
-    -------
-    2d np.ndarray
-        Список найденных объектов в формате 
-        `[xmin,ymin,xmax,ymax,conf,label]`
-    """
     return model([img]).xyxy[0].numpy()
 
 def get_colors(indexes : List[int]) -> dict:
@@ -130,41 +132,37 @@ def get_legend_color(class_name : int):
     color = rgb_colors[index]
     return 'background-color: rgb({color[0]},{color[1]},{color[2]})'.format(color=color)
 
-class VideoTransformer(VideoProcessorBase):
-    """Компонент для создания стрима веб камеры"""
-    def __init__(self):
-        self.model = model
-        self.rgb_colors = rgb_colors
-        self.target_class_ids = target_class_ids
-        self.confidence_threshold = confidence_threshold
-        #st.session_state.data = []
-        #self.session_state = st.session_state.data
 
-    def get_preds(self, img : np.ndarray) -> np.ndarray:
-        return self.model([img]).xyxy[0].numpy()
+import av
 
-    def transform(self, frame):
-        img = frame.to_ndarray(format="bgr24")
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        result = self.get_preds(img)
-        result = result[np.isin(result[:,-1], self.target_class_ids)]  
-        if 'data' not in st.session_state:
-            print('init3')
-            st.session_state.data = []  
-        for bbox_data in result:
-            xmin, ymin, xmax, ymax, conf, label = bbox_data
-            if conf > self.confidence_threshold:
-                p0, p1, label = (int(xmin), int(ymin)), (int(xmax), int(ymax)), int(label)
-                img = cv2.rectangle(img, p0, p1, self.rgb_colors[label], 2) 
-                ytext = ymin - 10 if ymin - 10 > 10 else ymin + 15
-                xtext = xmin + 10
-                class_ = CLASSES[label]
-                #if (class_ == 'pistol') | (class_ == 'knife'):
-                #    time_detect = datetime.datetime.now(pytz.timezone("America/New_York")).replace(tzinfo=None).strftime("%m-%d-%y %H:%M:%S")
-                #    self.session_state.append({'object': class_, 'time_detect': time_detect})
-                text_for_vis = '{} {}'.format(class_, str(conf.round(2)))
-                img = cv2.putText(img, text_for_vis, (int(xtext), int(ytext)),cv2.FONT_HERSHEY_SIMPLEX,0.5,self.rgb_colors[label],2,)
-        return cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+
+def transform(frame):
+    img = frame.to_ndarray(format="bgr24")
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    result = get_preds(img)
+    result = result[np.isin(result[:,-1], target_class_ids)]  
+    #result_label: List[Detection] = []
+    for bbox_data in result:
+        xmin, ymin, xmax, ymax, conf, label = bbox_data
+        if conf > confidence_threshold:
+            p0, p1, label = (int(xmin), int(ymin)), (int(xmax), int(ymax)), int(label)
+            img = cv2.rectangle(img, p0, p1, rgb_colors[label], 2) 
+            ytext = ymin - 10 if ymin - 10 > 10 else ymin + 15
+            xtext = xmin + 10
+            class_ = CLASSES[label]
+            #result_label.append(Detection(name=class_, prob=str(conf.round(2))))
+            if (class_ == 'firearm') | (class_ == 'knife'):
+                #result_label.append(Detection(name=class_, prob=str(conf.round(2))))
+                time_detect = datetime.datetime.now(pytz.timezone("America/New_York")).replace(tzinfo=None).strftime("%m-%d-%y %H:%M:%S")
+                result_queue.append({'object': class_, 'time_detect': time_detect})
+            #with lock:
+            #img_container["img"] = class_ + time_detect
+            text_for_vis = '{} {}'.format(class_, str(conf.round(2)))
+            img = cv2.putText(img, text_for_vis, (int(xtext), int(ytext)),cv2.FONT_HERSHEY_SIMPLEX,0.5,rgb_colors[label],2,)
+    #result_queue.append(result_label)
+    #return cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+    return av.VideoFrame.from_ndarray(img, format="bgr24")
 
 #endregion
 #region Load model
@@ -190,10 +188,10 @@ if model_type == 'Base':
     classes_selector = st.sidebar.multiselect('Select classes', CLASSES, default='person')
 elif model_type == 'Custom small':
     CLASSES = CLASSES_CUSTOM_S
-    classes_selector = st.sidebar.multiselect('Select classes', CLASSES, default='pistol')
+    classes_selector = st.sidebar.multiselect('Select classes', CLASSES, default='firearm')
 else:
     CLASSES = CLASSES_CUSTOM_M
-    classes_selector = st.sidebar.multiselect('Select classes', CLASSES, default='pistol')
+    classes_selector = st.sidebar.multiselect('Select classes', CLASSES, default='firearm')
 all_labels_chbox = st.sidebar.checkbox('All classes', value=True)
 
 
@@ -254,20 +252,26 @@ if prediction_mode == 'Single image':
         # use_column_width растянет изображение по ширине центральной колонки
         st.image(img_draw, use_column_width=True)
 elif prediction_mode == 'Web camera':
-    if 'data' not in st.session_state:
-        st.session_state.data = []
-    # создаем объект для вывода стрима с камеры
-    ctx = webrtc_streamer(key="example", video_processor_factory=VideoTransformer,
+    ctx = webrtc_streamer(key="example", video_frame_callback=transform,
         rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
         media_stream_constraints={"video": True, "audio": False})
+    #mode=WebRtcMode.SENDRECV, async_processing=True)
     # необходимо для того, чтобы объект VideoTransformer подхватил новые данные
     # после обновления страницы streamlit
-    if ctx.video_transformer:
-        ctx.video_transformer.model = model
-        ctx.video_transformer.rgb_colors = rgb_colors
-        ctx.video_transformer.target_class_ids = target_class_ids
-        ctx.video_transformer.confidence_threshold = confidence_threshold
-        #ctx.video_transformer.session_state = st.session_state.data
+    #ctx.video_transformer.session_state = st.session_state.data
+    if st.checkbox("Enable weapon logging", value=False):
+        #st.markdown("Pistol and knife logging")
+        if ctx.state.playing:
+            labels_placeholder = st.empty()
+            while True:
+                try:
+                    result_queue = result_queue[-7:]
+                    labels_placeholder.dataframe(result_queue)
+                    #time.sleep(0.1)
+                    if not ctx.state.playing:
+                        break
+                except:
+                    pass
 # выведем список найденных классов при работе с изображением или список всех
 # выбранных классов при работе с видео
 #detected_ids = set(detected_ids if detected_ids is not None else target_class_ids)
@@ -277,8 +281,8 @@ elif prediction_mode == 'Web camera':
 #labels = [CLASSES[index] for index in detected_ids]
 #legend_df = pd.DataFrame({'label': labels})
 #st.dataframe(legend_df)
-list_logs = st.session_state.data
-if len(list_logs) > 10:
-    st.session_state.data = list_logs[-10:]
-st.markdown("Pistol and knife logging")
-st.dataframe(st.session_state.data)
+#st.session_state.data.append(img_container['img'])
+#list_logs = st.session_state.data
+#if len(list_logs) > 10:
+#    st.session_state.data = list_logs[-10:]
+#st.dataframe(st.session_state.data)
